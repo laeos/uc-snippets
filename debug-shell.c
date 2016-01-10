@@ -409,6 +409,7 @@ static void exec_cmd(struct edit_state *s, int argc, char *argv[])
 	if (count != 1) {
 	    const char *err = count ? "ambiguous" : "not found";
 	    dmsg("command '%s': %s\r\n", argv[0], err);
+	    pop_tables(pushed);
 	    return;
 	}
 
