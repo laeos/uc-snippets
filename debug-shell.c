@@ -38,7 +38,7 @@ struct edit_state {
     int pos;
     const char *prompt;
     const struct rline_command *table_stack[TABLE_STACK_LENGTH];
-    uint8_t table_index;
+    int table_index;
 #if HISTORY_LENGTH
     struct history_entry history[HISTORY_LENGTH];
     int history_current;
@@ -152,7 +152,7 @@ static const struct rline_command *get_table(void)
     return edit_state.table_stack[edit_state.table_index - 1];
 }
 
-static void pop_tables(uint8_t count)
+static void pop_tables(int count)
 {
     if (count >= edit_state.table_index)
 	edit_state.table_index = 0;
@@ -187,8 +187,8 @@ static int __cycle_history(int pos, int dir)
 
 static void set_line(struct edit_state *s, char *str)
 {
-    s->len = s->pos = strlen(str);
-    memcpy(s->buf, str, s->len);
+    s->len = s->pos = (int)strlen(str);
+    memcpy(s->buf, str, (size_t)s->len);
     update_line(s);
 }
 #endif
@@ -239,10 +239,10 @@ static void up_level_cmd(int argc, char *argv[])
 }
 
 static const struct rline_command common_commands[] = {
-    { "help",    &help_cmd, ": help..." },
-    { "?",       &help_cmd, ": help..." },
-    { "history", &history_cmd, ": history..." },
-    { "exit",    &up_level_cmd, ": up" },
+    DEFCMD("help",    &help_cmd,     ": help..." ),
+    DEFCMD("?",       &help_cmd,     ": help..." ),
+    DEFCMD("history", &history_cmd,  ": history..." ),
+    DEFCMD("exit",    &up_level_cmd, ": up" ),
     END_COMMAND_LIST
 };
 
@@ -280,14 +280,14 @@ static uint32_t find_command(const struct rline_command *t, const char *txt, con
     const struct rline_command *common = common_commands;
     uint32_t count = 0;
     bool printed = false;
-    int txtlen = strlen(txt);
+    size_t txtlen = strlen(txt);
 
     if (is_prompt(t))
 	++t;
 
     *r = NULL;
     while (t->cmd) {
-	int cmdlen = strlen(t->cmd);
+	size_t cmdlen = strlen(t->cmd);
 
 	if (txtlen <= cmdlen) {
 	    if (strncasecmp(t->cmd, txt, txtlen) == 0) {
@@ -323,7 +323,7 @@ static int split(char *cmd, char *argv[])
 /* find last index of word, starting from this position */
 static int find_word_end(int from)
 {
-    while (edit_state.buf[from] && !isspace(edit_state.buf[from]))
+    while (edit_state.buf[from] && !isspace((int)edit_state.buf[from]))
 	++from;
     return from - 1;
 }
@@ -335,7 +335,7 @@ static int find_word_start(int word)
 
     while (word && edit_state.buf[pos]) {
 	pos = find_word_end(pos) + 1;
-	while (edit_state.buf[pos] && isspace(edit_state.buf[pos]))
+	while (edit_state.buf[pos] && isspace((int)edit_state.buf[pos]))
 	    ++pos;
 	--word;
     }
@@ -345,7 +345,7 @@ static int find_word_start(int word)
 /* replace word in command, as a result of tab expansion */
 static void replace_word(int word, const char *replacement)
 {
-    int need = strlen(replacement);
+    int need = (int)strlen(replacement);
     int start = find_word_start(word);
     int end = find_word_end(start);
     int len = end - start + 1;
@@ -354,7 +354,7 @@ static void replace_word(int word, const char *replacement)
     if (delta) {
 	if ((edit_state.len - len + need) >= BUFFER_LENGTH)
 	    return; /* argh */
-	memmove(edit_state.buf + start + need,  edit_state.buf + end + 1, edit_state.len - end);
+	memmove(edit_state.buf + start + need,  edit_state.buf + end + 1, (size_t)(edit_state.len - end));
 	edit_state.len += delta;
     }
 
@@ -363,7 +363,7 @@ static void replace_word(int word, const char *replacement)
     else
 	edit_state.pos += delta;
 
-    memcpy(edit_state.buf + start, replacement, need);
+    memcpy(edit_state.buf + start, replacement, (size_t)need);
 }
 
 static const struct rline_command *table_expand(const struct rline_command *t, int word, const char *txt)
@@ -387,7 +387,7 @@ static void complete(struct edit_state *s)
     char *arg[MAX_ARGC];
     int count, word = 0;
 
-    memcpy(s->cpl, s->buf, s->pos);
+    memcpy(s->cpl, s->buf, (size_t)s->pos);
     s->cpl[s->pos] = '\0';
     count = split(s->cpl, arg);
 
@@ -438,7 +438,7 @@ static void update_line(struct edit_state *s)
     dmsg("\r%s> %s\x1b[0K\r\x1b[%dC", 
 	    s->prompt,
 	    s->buf,
-	    s->pos + strlen(s->prompt) + 2);
+	    s->pos + (int)strlen(s->prompt) + 2);
 }
 
 static void push_history(struct edit_state *s)
@@ -486,11 +486,11 @@ static void exec_bang_index(struct edit_state *s, int idx)
 static void exec_bang_prefix(struct edit_state *s, const char *prefix)
 {
     int i, n =  __cycle_history(edit_state.history_pos, -1);
-    int prefix_len = strlen(prefix);
+    size_t prefix_len = strlen(prefix);
 
     for (i = 0; i < HISTORY_LENGTH; i++) {
 	char *b = edit_state.history[n].buf;
-	int bl = strlen(b);
+	size_t bl = strlen(b);
 
 	if ((bl > prefix_len) && (memcmp(b, prefix, prefix_len) == 0)) {
 	    set_line(s, b);
@@ -508,12 +508,12 @@ static bool maybe_exec_bang(struct edit_state *s)
     if (s->buf[0] == '!') {
 #if HISTORY_LENGTH
 	char *end = NULL;
-	if (isdigit(s->buf[1])) {
-	    int digit = strtoul(s->buf + 1, &end, 0);
+	if (isdigit((int)s->buf[1])) {
+	    unsigned long int digit = strtoul(s->buf + 1, &end, 0);
 	    if (*end)  {
 		dmsg("malformed\n");
 	    } else {
-		exec_bang_index(s, digit);
+		exec_bang_index(s, (int)digit);
 	    }
 	} else {
 	    exec_bang_prefix(s, s->buf + 1);
@@ -545,7 +545,7 @@ static void insert(struct edit_state *s, char ch)
     if (s->len >= BUFFER_LENGTH)
 	return;
     if (s->len != s->pos)
-	memmove(s->buf+s->pos+1, s->buf+s->pos, s->len - s->pos);
+	memmove(s->buf+s->pos+1, s->buf+s->pos, (size_t)(s->len - s->pos));
     s->buf[s->pos] = ch;
     ++s->pos;
     ++s->len;
@@ -583,7 +583,7 @@ static void move_right(struct edit_state *s)
 static void move_backspace(struct edit_state *s)
 {
     if (s->pos && s->len) {
-	memmove(s->buf+s->pos-1, s->buf+s->pos, s->len - s->pos);
+	memmove(s->buf+s->pos-1, s->buf+s->pos, (size_t)(s->len - s->pos));
 	s->pos--;
 	s->len--;
 	update_line(s);
@@ -593,7 +593,7 @@ static void move_backspace(struct edit_state *s)
 static void delete_char(struct edit_state *s)
 {
     if (s->len && (s->pos < s->len)) {
-	memmove(s->buf+s->pos, s->buf+s->pos+1, s->len - s->pos - 1);
+	memmove(s->buf+s->pos, s->buf+s->pos+1, (size_t)(s->len - s->pos - 1));
 	s->len--;
 	update_line(s);
     }
@@ -602,13 +602,12 @@ static void delete_char(struct edit_state *s)
 static void delete_prev_word(struct edit_state *s)
 {
     int old_pos = s->pos;
-
     while (s->pos && s->buf[s->pos - 1] == ' ')
 	s->pos--;
     while (s->pos && s->buf[s->pos - 1] != ' ')
 	s->pos--;
 
-    memmove(s->buf+s->pos, s->buf+old_pos, s->len - old_pos + 1);
+    memmove(s->buf+s->pos, s->buf+old_pos, (size_t)(s->len - old_pos + 1));
     s->len -= (old_pos - s->pos);
     update_line(s);
 }

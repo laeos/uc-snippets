@@ -15,8 +15,9 @@ void dmsg(const char *format, ...);
 void dhexdump(size_t saddr, const void *vbuf, size_t count);
 
 /* debug-shell.c */
-#define END_COMMAND_LIST 	{ 0, 0, 0 }
-#define DEFPROMPT(prompt)	{ NULL, NULL, prompt, NULL }
+#define END_COMMAND_LIST 	{ 0, 0, 0, 0 }
+#define DEFPROMPT(prompt)	{ .help = prompt }
+#define DEFCMD(name, fn, helpstr) { .cmd  = name, .func = fn, .help = helpstr }
 
 struct rline_command {
     const char *cmd;
